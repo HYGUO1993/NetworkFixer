@@ -1,0 +1,4 @@
+# 核心代码仅依赖 Python 标准库 (tkinter, subprocess, ctypes, winreg 等)
+# 只有打包工具是外部依赖
+
+pyinstaller>=6.0.0
