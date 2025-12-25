@@ -13,7 +13,7 @@ import os
 class NetworkFixerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("网络修复工具 v2.0")
+        self.root.title("网络修复工具 v1.0")
         self.root.geometry("540x600")
         self.root.resizable(False, False)
         
