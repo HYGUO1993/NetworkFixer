@@ -52,6 +52,10 @@
    ```
    打包完成后，EXE 文件位于 `dist/NetworkFixer/NetworkFixer.exe`。
 
+## 📅 更新日志 (Changelog)
+
+详见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## ❓ 常见问题 (Troubleshooting)
 
 - **运行即退出/未见窗口**：请确认以管理员身份启动；若 UAC 被安全软件拦截，请在信任后重试。

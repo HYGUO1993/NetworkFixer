@@ -13,7 +13,7 @@ import os
 class NetworkFixerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("网络修复工具 v1.0")
+        self.root.title("网络修复工具 v1.0.1")
         self.root.geometry("560x600")
         self.root.resizable(False, False)
         
@@ -139,12 +139,23 @@ class NetworkFixerApp:
                 creationflags=0x08000000,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True
+                text=False  # Capture bytes to handle encoding manually
             )
-            return True, proc.stdout.strip()
+            # Try decoding with system default encoding (mbcs), fallback to utf-8, ignore errors if must
+            try:
+                out = proc.stdout.decode('mbcs', errors='replace')
+            except Exception:
+                out = proc.stdout.decode('utf-8', errors='replace')
+            
+            return True, out.strip()
         except subprocess.CalledProcessError as e:
-            out = e.stdout.strip() if e.stdout else ""
-            return False, out
+            # Decode stderr/stdout from exception if available
+            raw_out = e.stdout if e.stdout else b""
+            try:
+                out = raw_out.decode('mbcs', errors='replace')
+            except Exception:
+                out = raw_out.decode('utf-8', errors='replace')
+            return False, out.strip()
         except Exception as e:
             return False, str(e)
 
@@ -153,11 +164,18 @@ class NetworkFixerApp:
         names = []
         if ok and out:
             for line in out.splitlines():
-                parts = line.strip().split()
-                if len(parts) >= 4 and not line.startswith("管理员") and not line.startswith("Admin"):
-                    name = parts[-1]
-                    if name.lower() not in {"name", "接口"}:
-                        names.append(name)
+                # Split by whitespace, max 3 splits to preserve spaces in interface name (4th column)
+                parts = line.strip().split(maxsplit=3)
+                if len(parts) >= 4:
+                    # Filter out header/separator lines
+                    # Header usually starts with "Admin State" / "管理员状态"
+                    # Separator usually starts with "---"
+                    p0 = parts[0]
+                    if p0.startswith('-') or p0 in ["Admin", "管理员状态"]:
+                        continue
+                    
+                    name = parts[3]
+                    names.append(name)
         return names
 
     def refresh_adapters(self):
