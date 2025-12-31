@@ -141,20 +141,29 @@ class NetworkFixerApp:
                 stderr=subprocess.STDOUT,
                 text=False  # Capture bytes to handle encoding manually
             )
-            # Try decoding with system default encoding (mbcs), fallback to utf-8, ignore errors if must
+            
+            # 优先尝试 UTF-8 (严格模式)，因为 netsh 在某些环境下输出 UTF-8
+            # 如果不是合法的 UTF-8，会抛出异常，然后回退到系统默认编码 (mbcs)
             try:
-                out = proc.stdout.decode('mbcs', errors='replace')
-            except Exception:
-                out = proc.stdout.decode('utf-8', errors='replace')
+                out = proc.stdout.decode('utf-8')
+            except UnicodeError:
+                try:
+                    out = proc.stdout.decode('mbcs', errors='replace')
+                except Exception:
+                    # 最后的兜底
+                    out = proc.stdout.decode('utf-8', errors='replace')
             
             return True, out.strip()
         except subprocess.CalledProcessError as e:
             # Decode stderr/stdout from exception if available
             raw_out = e.stdout if e.stdout else b""
             try:
-                out = raw_out.decode('mbcs', errors='replace')
-            except Exception:
-                out = raw_out.decode('utf-8', errors='replace')
+                out = raw_out.decode('utf-8')
+            except UnicodeError:
+                try:
+                    out = raw_out.decode('mbcs', errors='replace')
+                except Exception:
+                    out = raw_out.decode('utf-8', errors='replace')
             return False, out.strip()
         except Exception as e:
             return False, str(e)
