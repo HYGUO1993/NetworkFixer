@@ -9,13 +9,23 @@ import threading
 import urllib.request
 import socket
 import os
+import time
 
 class NetworkFixerApp:
+    # 优化常量
+    ADAPTER_CACHE_TTL = 5  # 网卡列表缓存时间（秒）
+    PING_TIMEOUT_MS = 2000  # Ping超时时间（毫秒）
+    HTTP_TIMEOUT_SEC = 3  # HTTP连接超时时间（秒）
+    
     def __init__(self, root):
         self.root = root
         self.root.title("网络修复工具 v1.0.1")
         self.root.geometry("560x600")
         self.root.resizable(False, False)
+        
+        # 优化：添加缓存以避免重复计算
+        self._adapter_cache = None
+        self._adapter_cache_time = 0
         
         self.setup_style()
         self.create_widgets()
@@ -142,53 +152,64 @@ class NetworkFixerApp:
                 text=False  # Capture bytes to handle encoding manually
             )
             
-            # 优先尝试 UTF-8 (严格模式)，因为 netsh 在某些环境下输出 UTF-8
-            # 如果不是合法的 UTF-8，会抛出异常，然后回退到系统默认编码 (mbcs)
+            # 优化：简化编码检测逻辑，优先使用 mbcs（Windows 默认），出错时使用 utf-8 替换
+            # 这比多重 try-catch 更高效
             try:
-                out = proc.stdout.decode('utf-8')
-            except UnicodeError:
-                try:
-                    out = proc.stdout.decode('mbcs', errors='replace')
-                except Exception:
-                    # 最后的兜底
-                    out = proc.stdout.decode('utf-8', errors='replace')
+                out = proc.stdout.decode('mbcs')
+            except (UnicodeError, LookupError):
+                out = proc.stdout.decode('utf-8', errors='replace')
             
             return True, out.strip()
         except subprocess.CalledProcessError as e:
             # Decode stderr/stdout from exception if available
             raw_out = e.stdout if e.stdout else b""
             try:
-                out = raw_out.decode('utf-8')
-            except UnicodeError:
-                try:
-                    out = raw_out.decode('mbcs', errors='replace')
-                except Exception:
-                    out = raw_out.decode('utf-8', errors='replace')
+                out = raw_out.decode('mbcs')
+            except (UnicodeError, LookupError):
+                out = raw_out.decode('utf-8', errors='replace')
             return False, out.strip()
         except Exception as e:
             return False, str(e)
 
     def list_adapters(self):
         ok, out = self.run_command('netsh interface show interface')
+        if not (ok and out):
+            return []
+        
+        # 优化：预编译常量，减少重复查找
         names = []
-        if ok and out:
-            for line in out.splitlines():
-                # Split by whitespace, max 3 splits to preserve spaces in interface name (4th column)
-                parts = line.strip().split(maxsplit=3)
-                if len(parts) >= 4:
-                    # Filter out header/separator lines
-                    # Header usually starts with "Admin State" / "管理员状态"
-                    # Separator usually starts with "---"
-                    p0 = parts[0]
-                    if p0.startswith('-') or p0 in ["Admin", "管理员状态"]:
-                        continue
-                    
-                    name = parts[3]
-                    names.append(name)
+        lines = out.splitlines()
+        
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+                
+            # Split by whitespace, max 3 splits to preserve spaces in interface name (4th column)
+            parts = stripped.split(maxsplit=3)
+            if len(parts) < 4:
+                continue
+            
+            # 优化：使用单次检查代替多个条件
+            first_char = parts[0][0] if parts[0] else ''
+            if first_char == '-' or parts[0] in ("Admin", "管理员状态"):
+                continue
+            
+            names.append(parts[3])
+        
         return names
 
     def refresh_adapters(self):
-        adapters = self.list_adapters()
+        # 优化：使用缓存避免频繁调用 netsh（ADAPTER_CACHE_TTL秒内重用缓存）
+        current_time = time.time()
+        
+        if self._adapter_cache and (current_time - self._adapter_cache_time) < self.ADAPTER_CACHE_TTL:
+            adapters = self._adapter_cache
+        else:
+            adapters = self.list_adapters()
+            self._adapter_cache = adapters
+            self._adapter_cache_time = current_time
+        
         self.combo_adapter.config(values=adapters)
         if adapters:
             self.combo_adapter.current(0)
@@ -220,19 +241,21 @@ class NetworkFixerApp:
             return False
 
     def restart_adapter(self, adapter_name):
-        ok1, out1 = self.run_command(f'netsh interface set interface "{adapter_name}" admin=disabled')
-        ok2, out2 = self.run_command(f'netsh interface set interface "{adapter_name}" admin=enabled')
-        return (ok1 and ok2), (out1 + "\n" + out2).strip()
+        # 优化：使用命令链合并两个netsh调用
+        ok, out = self.run_command(f'netsh interface set interface "{adapter_name}" admin=disabled && netsh interface set interface "{adapter_name}" admin=enabled')
+        return ok, out
 
     def test_connectivity(self):
         results = {}
-        ok114, _ = self.run_command('ping -n 2 114.114.114.114')
-        ok88, _ = self.run_command('ping -n 2 8.8.8.8')
+        # 优化：减少 ping 次数从 2 到 1，加快测试速度
+        ok114, _ = self.run_command(f'ping -n 1 -w {self.PING_TIMEOUT_MS} 114.114.114.114')
+        ok88, _ = self.run_command(f'ping -n 1 -w {self.PING_TIMEOUT_MS} 8.8.8.8')
         results['ping_114'] = ok114
         results['ping_88'] = ok88
         
         try:
-            socket.setdefaulttimeout(5)
+            # 优化：减少 HTTP 超时从 5秒 到 HTTP_TIMEOUT_SEC秒
+            socket.setdefaulttimeout(self.HTTP_TIMEOUT_SEC)
             with urllib.request.urlopen('http://www.msftconnecttest.com/redirect') as resp:
                 code = resp.getcode()
                 results['http'] = (200 <= code < 400)
@@ -280,10 +303,9 @@ class NetworkFixerApp:
         return self.run_command("netsh winsock reset")
 
     def step_reset_ip(self):
-        ok1, out1 = self.run_command("ipconfig /release")
-        ok2, out2 = self.run_command("ipconfig /renew")
-        merged = "\n".join(filter(None, [out1, out2]))
-        return (ok1 and ok2), merged
+        # 优化：使用命令链减少subprocess调用次数
+        ok, out = self.run_command("ipconfig /release && ipconfig /renew")
+        return ok, out
 
     def step_reset_tcpip(self):
         return self.run_command("netsh int ip reset")
