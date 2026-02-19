@@ -12,6 +12,11 @@ import os
 import time
 
 class NetworkFixerApp:
+    # 优化常量
+    ADAPTER_CACHE_TTL = 5  # 网卡列表缓存时间（秒）
+    PING_TIMEOUT_MS = 2000  # Ping超时时间（毫秒）
+    HTTP_TIMEOUT_SEC = 3  # HTTP连接超时时间（秒）
+    
     def __init__(self, root):
         self.root = root
         self.root.title("网络修复工具 v1.0.1")
@@ -195,10 +200,10 @@ class NetworkFixerApp:
         return names
 
     def refresh_adapters(self):
-        # 优化：使用缓存避免频繁调用 netsh（5秒内重用缓存）
+        # 优化：使用缓存避免频繁调用 netsh（ADAPTER_CACHE_TTL秒内重用缓存）
         current_time = time.time()
         
-        if self._adapter_cache and (current_time - self._adapter_cache_time) < 5:
+        if self._adapter_cache and (current_time - self._adapter_cache_time) < self.ADAPTER_CACHE_TTL:
             adapters = self._adapter_cache
         else:
             adapters = self.list_adapters()
@@ -243,14 +248,14 @@ class NetworkFixerApp:
     def test_connectivity(self):
         results = {}
         # 优化：减少 ping 次数从 2 到 1，加快测试速度
-        ok114, _ = self.run_command('ping -n 1 -w 2000 114.114.114.114')
-        ok88, _ = self.run_command('ping -n 1 -w 2000 8.8.8.8')
+        ok114, _ = self.run_command(f'ping -n 1 -w {self.PING_TIMEOUT_MS} 114.114.114.114')
+        ok88, _ = self.run_command(f'ping -n 1 -w {self.PING_TIMEOUT_MS} 8.8.8.8')
         results['ping_114'] = ok114
         results['ping_88'] = ok88
         
         try:
-            # 优化：减少 HTTP 超时从 5秒 到 3秒
-            socket.setdefaulttimeout(3)
+            # 优化：减少 HTTP 超时从 5秒 到 HTTP_TIMEOUT_SEC秒
+            socket.setdefaulttimeout(self.HTTP_TIMEOUT_SEC)
             with urllib.request.urlopen('http://www.msftconnecttest.com/redirect') as resp:
                 code = resp.getcode()
                 results['http'] = (200 <= code < 400)

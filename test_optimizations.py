@@ -74,13 +74,15 @@ def test_caching_mechanism():
     print("\nTesting caching mechanism...")
     
     # Simulate cache behavior
+    # Note: This value should match ADAPTER_CACHE_TTL in NetworkFixerApp (currently 5 seconds)
+    CACHE_TTL = 5  # seconds
+    
     cache = None
     cache_time = 0
-    cache_ttl = 5  # 5 second TTL
     
     # First access - should populate cache
     current_time = time.time()
-    if not cache or (current_time - cache_time) >= cache_ttl:
+    if not cache or (current_time - cache_time) >= CACHE_TTL:
         cache = ["Adapter1", "Adapter2", "Adapter3"]
         cache_time = current_time
         print(f"  ✓ Cache populated: {cache}")
@@ -88,7 +90,7 @@ def test_caching_mechanism():
     # Second access immediately - should use cache
     time.sleep(0.1)
     current_time = time.time()
-    if cache and (current_time - cache_time) < cache_ttl:
+    if cache and (current_time - cache_time) < CACHE_TTL:
         print(f"  ✓ Cache hit (age: {current_time - cache_time:.3f}s)")
         cache_hit = True
     else:
@@ -96,12 +98,12 @@ def test_caching_mechanism():
         cache_hit = False
     
     # Wait for cache to expire
-    print(f"  Waiting {cache_ttl}s for cache to expire...")
-    time.sleep(cache_ttl)
+    print(f"  Waiting {CACHE_TTL}s for cache to expire...")
+    time.sleep(CACHE_TTL)
     
     # Third access after TTL - should refresh cache
     current_time = time.time()
-    if not cache or (current_time - cache_time) >= cache_ttl:
+    if not cache or (current_time - cache_time) >= CACHE_TTL:
         cache = ["Adapter1", "Adapter2", "Adapter3", "Adapter4"]
         cache_time = current_time
         print(f"  ✓ Cache refreshed after TTL: {cache}")
