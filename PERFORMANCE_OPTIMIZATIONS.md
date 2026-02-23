@@ -1,11 +1,16 @@
-# Performance Optimizations Summary
+# Performance Optimizations Summary (v2 同步版)
 
 ## Overview
-This document describes the performance improvements made to the NetworkFixer application to reduce execution time and improve responsiveness.
+This document describes performance-related improvements in NetworkFixer.
+
+As of `v2.0.0`, the project has been refactored from a single-file script into the `networkfixer/` package.
+Some optimizations were originally introduced in `fix_network.py` and are now carried into dedicated modules (for example `core/connectivity.py`, `core/adapters.py`, `core/operations.py`).
+
+> Note: Previous line-number references from the monolithic file are intentionally removed because they are no longer stable after refactor.
 
 ## Optimizations Implemented
 
-### 1. Simplified Encoding Detection (Lines 152-172)
+### 1. Simplified Encoding Detection
 **Before:** Triple nested try-catch blocks for encoding detection
 - First tried UTF-8 strict
 - Then tried mbcs with replace
@@ -18,7 +23,7 @@ This document describes the performance improvements made to the NetworkFixer ap
 
 **Impact:** Reduces exception handling overhead by ~60%, faster command output processing
 
-### 2. Network Adapter Parsing Optimization (Lines 178-205)
+### 2. Network Adapter Parsing Optimization
 **Before:** Nested if statements with multiple string operations
 - Called startswith() for each line
 - Multiple condition checks
@@ -32,7 +37,7 @@ This document describes the performance improvements made to the NetworkFixer ap
 
 **Impact:** ~30% faster adapter list parsing
 
-### 3. Adapter List Caching (Lines 15-18, 24-26, 207-219)
+### 3. Adapter List Caching
 **Before:** Called `netsh interface show interface` every time refresh button was clicked
 - No caching mechanism
 - Repeated system calls
@@ -45,7 +50,7 @@ This document describes the performance improvements made to the NetworkFixer ap
 
 **Impact:** Eliminates redundant netsh calls, ~90% faster for repeated requests within cache window
 
-### 4. Connectivity Test Optimization (Lines 245-260)
+### 4. Connectivity Test Optimization
 **Before:**
 - Ping count: `-n 2` (2 pings per target)
 - HTTP timeout: 5 seconds
@@ -57,14 +62,14 @@ This document describes the performance improvements made to the NetworkFixer ap
 
 **Impact:** ~40% faster connectivity tests (from ~6-7 seconds to ~3-4 seconds)
 
-### 5. Consolidated Subprocess Calls (Lines 233-236, 309-312)
+### 5. Consolidated Subprocess Calls
 **Before:** Multiple separate subprocess calls
 - `ipconfig /release` then `ipconfig /renew` (2 calls)
 - Network adapter disable then enable (2 calls)
 
-**After:** Command chaining with `&&` operator
-- `ipconfig /release && ipconfig /renew` (1 call)
-- Network adapter operations in single command (1 call)
+**After:** Command chaining via structured sequential execution
+- `ipconfig /release` + `ipconfig /renew` through `run_chain()` (controlled sequence)
+- Network adapter disable/enable through `run_chain()` with parameter lists
 
 **Impact:** Reduces process creation overhead, ~25% faster for these operations
 
@@ -94,11 +99,11 @@ All optimizations have been validated with the included `test_optimizations.py` 
 
 ## Configuration
 
-The following constants can be adjusted at the top of the `NetworkFixerApp` class:
+Key constants can be adjusted in config/model modules (or instantiated values):
 ```python
-ADAPTER_CACHE_TTL = 5  # Adapter list cache duration (seconds)
-PING_TIMEOUT_MS = 2000  # Ping timeout (milliseconds)
-HTTP_TIMEOUT_SEC = 3    # HTTP connection timeout (seconds)
+adapter_cache_ttl_sec = 5  # Adapter list cache duration (seconds)
+ping_timeout_ms = 2000     # Ping timeout (milliseconds)
+http_timeout_sec = 3       # HTTP connection timeout (seconds)
 ```
 
 ## Backward Compatibility
@@ -123,4 +128,11 @@ All optimizations maintain 100% backward compatibility with the original functio
 - Added `.gitignore` file to exclude build artifacts and Python cache files
 - Improved code organization with cache initialization in `__init__`
 - Added comprehensive test suite and documentation
+
+## Mapping to v2 Modules
+
+- Command execution and decoding: `networkfixer/core/executor.py`
+- Adapter parsing and caching: `networkfixer/core/adapters.py`
+- Connectivity checks and timeout handling: `networkfixer/core/connectivity.py`
+- Operation orchestration (including reset chains): `networkfixer/core/operations.py`
 

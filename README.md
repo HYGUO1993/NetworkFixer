@@ -6,6 +6,8 @@
 
 **NetworkFixer** 是一个轻量级的 Windows 网络修复工具，专为解决 VPN、代理软件关闭后无法上网的问题而设计。
 
+当前仓库已完成 `v2.0.0` 架构重构（`networkfixer/` 包化），保持零运行时外部依赖（仅标准库）。
+
 ![软件截图](NetworkFixer.png)
 
 
@@ -16,6 +18,25 @@
 - **深度修复**：提供重置 TCP/IP 协议栈和重启指定网卡的高级选项。
 - **可视化日志**：实时显示修复进度和操作结果。
 - **连通性测试**：修复完成后自动 Ping 测试 (114/8.8.8.8) 及 HTTP 连通性检测。
+- **线程安全 UI**：后台任务通过主线程调度更新 Tkinter 组件，提升稳定性。
+- **更安全的命令执行**：默认使用参数列表与 `shell=False`，降低命令注入风险。
+
+## 🏗️ 当前结构 (v2)
+
+```text
+NetworkFixer/
+├── fix_network.py
+├── networkfixer/
+│   ├── core/
+│   ├── i18n/
+│   ├── models/
+│   ├── ui/
+│   └── utils/
+├── tests/
+├── REFACTOR_PLAN.md
+├── IMPLEMENTATION_LOG.md
+└── CHANGELOG.md
+```
 
 ## 📥 下载与使用
 
@@ -37,6 +58,11 @@
    python fix_network.py
    ```
 
+3. （可选）验证模块导入：
+   ```powershell
+   python -c "from networkfixer.ui import NetworkFixerApp; print('OK')"
+   ```
+
 ## 📦 打包为 EXE
 
 如果你想自己编译生成 EXE 文件：
@@ -55,6 +81,12 @@
 ## 📅 更新日志 (Changelog)
 
 详见 [CHANGELOG.md](CHANGELOG.md)。
+
+## 📚 重构文档
+
+- 重构方案： [REFACTOR_PLAN.md](REFACTOR_PLAN.md)
+- 实施日志： [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md)
+- 性能说明： [PERFORMANCE_OPTIMIZATIONS.md](PERFORMANCE_OPTIMIZATIONS.md)
 
 ## ❓ 常见问题 (Troubleshooting)
 
