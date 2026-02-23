@@ -23,7 +23,7 @@ from ..i18n import t, detect_system_language
 
 logger = logging.getLogger(__name__)
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 
 class NetworkFixerApp:
