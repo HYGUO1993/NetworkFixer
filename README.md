@@ -32,9 +32,10 @@ NetworkFixer/
 │   ├── models/
 │   ├── ui/
 │   └── utils/
+├── docs/
+│   ├── archive/
+│   └── releases/
 ├── tests/
-├── REFACTOR_PLAN.md
-├── IMPLEMENTATION_LOG.md
 └── CHANGELOG.md
 ```
 
@@ -84,9 +85,11 @@ NetworkFixer/
 
 ## 📚 重构文档
 
-- 重构方案： [REFACTOR_PLAN.md](REFACTOR_PLAN.md)
-- 实施日志： [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md)
-- 性能说明： [PERFORMANCE_OPTIMIZATIONS.md](PERFORMANCE_OPTIMIZATIONS.md)
+- 文档导航： [docs/README.md](docs/README.md)
+- 重构方案（归档）： [docs/archive/REFACTOR_PLAN.md](docs/archive/REFACTOR_PLAN.md)
+- 实施日志（归档）： [docs/archive/IMPLEMENTATION_LOG.md](docs/archive/IMPLEMENTATION_LOG.md)
+- 性能说明（归档）： [docs/archive/PERFORMANCE_OPTIMIZATIONS.md](docs/archive/PERFORMANCE_OPTIMIZATIONS.md)
+- 发布说明： [docs/releases/RELEASE_NOTES_v2.0.1.md](docs/releases/RELEASE_NOTES_v2.0.1.md)
 
 ## ❓ 常见问题 (Troubleshooting)
 
