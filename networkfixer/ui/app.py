@@ -23,7 +23,7 @@ from ..i18n import t, detect_system_language
 
 logger = logging.getLogger(__name__)
 
-__version__ = "2.0.1"
+__version__ = "2.0.2"
 
 
 class NetworkFixerApp:
@@ -322,7 +322,7 @@ class NetworkFixerApp:
 
         self.log_text = ScrolledText(
             frame_log,
-            height=12,
+            height=18,
             font=("Consolas", 10)
         )
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)

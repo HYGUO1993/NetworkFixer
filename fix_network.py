@@ -59,14 +59,61 @@ def _elevate_privileges() -> None:
     sys.exit()
 
 
+def _enable_high_dpi_awareness() -> None:
+    """启用 Windows 高 DPI 感知，减少高分屏下的界面发糊。"""
+    try:
+        user32 = ctypes.windll.user32
+        shcore = getattr(ctypes.windll, "shcore", None)
+
+        # Windows 10+: Per Monitor v2（最佳）
+        # -4 == DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+        try:
+            user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+            return
+        except Exception:
+            pass
+
+        # Windows 8.1+: Per Monitor Aware
+        if shcore is not None:
+            try:
+                # 2 == PROCESS_PER_MONITOR_DPI_AWARE
+                shcore.SetProcessDpiAwareness(2)
+                return
+            except Exception:
+                pass
+
+        # Windows Vista+: System DPI Aware（兜底）
+        try:
+            user32.SetProcessDPIAware()
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _configure_tk_scaling(root) -> None:
+    """根据实际 DPI 调整 Tk 缩放，保证文字和控件清晰度。"""
+    try:
+        dpi = float(root.winfo_fpixels("1i"))
+        scaling = dpi / 72.0
+
+        if 1.0 <= scaling <= 4.0:
+            root.tk.call("tk", "scaling", scaling)
+    except Exception:
+        pass
+
+
 def main() -> None:
     if not is_admin():
         _elevate_privileges()
+
+    _enable_high_dpi_awareness()
 
     import tkinter as tk
     from networkfixer.ui import NetworkFixerApp
 
     root = tk.Tk()
+    _configure_tk_scaling(root)
     app = NetworkFixerApp(root)
 
     def on_closing():

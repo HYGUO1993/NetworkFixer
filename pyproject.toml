@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "networkfixer"
-version = "2.0.1"
+version = "2.0.2"
 description = "Lightweight Windows network repair tool for VPN/Proxy issues"
 readme = "README.md"
 license = {text = "MIT"}

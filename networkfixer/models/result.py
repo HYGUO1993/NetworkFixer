@@ -55,5 +55,5 @@ class AppConfig:
     log_to_file: bool = True
     log_file_name: str = "networkfixer.log"
     window_width: int = 560
-    window_height: int = 600
+    window_height: int = 760
     language: str = "zh_CN"
