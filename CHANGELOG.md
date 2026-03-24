@@ -1,5 +1,21 @@
 # 更新日志 (Changelog)
 
+## [v2.1.0] - 2026-03-24
+
+### ✨ 新增功能
+- **幽灵代理专杀 (Proxy Ghost Killer)** - 新增核心功能模块，用于检测和清除失效的代理环境变量
+  - 全景扫描：检测进程级、用户级、系统级的 http_proxy/https_proxy/all_proxy 环境变量（兼容大小写）
+  - 健康检查：通过 TCP 端口连接测试判断代理是否存活（2秒超时）
+  - 一键修复：自动清除失效的代理环境变量，支持进程、用户、系统三个级别
+  - 友好提示：使用 emoji 清晰展示扫描结果和修复状态
+  - 中英双语：完整支持中文和英文界面
+
+### 🔧 技术细节
+- 新增 `networkfixer/core/proxy_env.py` 模块，包含 `ProxyGhostKiller`、`ProxyEnvScanner`、`ProxyHealthChecker` 类
+- 在 `NetworkOperations` 中集成 `ProxyGhostKiller` 功能
+- UI 新增"检测幽灵代理"按钮，提供独立的扫描和修复流程
+- 新增完整的 i18n 翻译支持（中文/英文）
+
 ## [v2.0.2] - 2026-02-23
 
 ### ✨ 显示与可用性改进
