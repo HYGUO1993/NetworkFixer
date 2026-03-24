@@ -8,7 +8,7 @@
 
 当前仓库已完成 `v2.0.0` 架构重构（`networkfixer/` 包化），保持零运行时外部依赖（仅标准库）。
 
-![软件截图](NetworkFixer.png)
+![软件截图](NetworkFixer.png?v=2.1.0)
 
 
 ## 🚀 主要功能
