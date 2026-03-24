@@ -5,6 +5,7 @@ from .executor import get_executor
 from .registry import ProxyRegistry
 from .adapters import AdapterManager
 from .connectivity import ConnectivityTester
+from .proxy_env import ProxyGhostKiller
 from ..models.result import StepResult, AppConfig, ConnectivityResult
 from ..models.config import get_config
 
@@ -28,6 +29,9 @@ class NetworkOperations:
         self.connectivity_tester = ConnectivityTester(
             ping_timeout_ms=self.config.ping_timeout_ms,
             http_timeout_sec=self.config.http_timeout_sec
+        )
+        self.proxy_ghost_killer = ProxyGhostKiller(
+            health_check_timeout=2.0
         )
 
     def get_proxy_status(self) -> Tuple[bool, str]:
@@ -82,6 +86,24 @@ class NetworkOperations:
 
     def test_connectivity(self) -> ConnectivityResult:
         return self.connectivity_tester.test()
+
+    def scan_proxy_env(self):
+        """
+        Scan and test proxy environment variables for ghost proxies.
+
+        Returns:
+            Tuple of (healthy_proxies, dead_proxies)
+        """
+        return self.proxy_ghost_killer.scan_and_test()
+
+    def fix_proxy_env(self) -> dict:
+        """
+        Automatically fix (remove) dead proxy environment variables.
+
+        Returns:
+            Dictionary of StepResults for each scope
+        """
+        return self.proxy_ghost_killer.auto_fix()
 
     def build_steps(
         self,
