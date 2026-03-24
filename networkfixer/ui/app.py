@@ -300,6 +300,16 @@ class NetworkFixerApp:
         )
         self.btn_export.grid(row=0, column=3, padx=4, sticky="ew")
 
+        # 第二行：幽灵代理专杀按钮
+        self.btn_proxy_ghost = ttk.Button(
+            frame_run,
+            text=t("proxy_ghost.btn_scan", self.lang),
+            width=25,
+            style="Primary.TButton",
+            command=self._start_proxy_ghost_scan
+        )
+        self.btn_proxy_ghost.grid(row=1, column=0, columnspan=2, padx=4, pady=(4, 0), sticky="ew")
+
     def _create_status_section(self) -> None:
         """创建状态和进度区域"""
         # 状态标签
@@ -422,7 +432,8 @@ class NetworkFixerApp:
         self.ui_caller.call(
             lambda: (
                 self.btn_fix.config(state=state),
-                self.btn_test.config(state=state)
+                self.btn_test.config(state=state),
+                self.btn_proxy_ghost.config(state=state)
             )
         )
 
@@ -632,6 +643,120 @@ class NetworkFixerApp:
 
         except Exception as e:
             logger.exception("连通性测试失败")
+            self._set_status(t("status.error", self.lang, error=str(e)), "red")
+            self.ui_caller.call(
+                lambda: messagebox.showerror(
+                    t("msg.fix_error.title", self.lang),
+                    t("msg.fix_error.content", self.lang, error=str(e))
+                )
+            )
+
+        finally:
+            self.ui_caller.call(lambda: self.progress.stop())
+            self.ui_caller.call(lambda: self.progress.config(mode="determinate", value=0))
+            self._set_buttons_state(True)
+
+    def _start_proxy_ghost_scan(self) -> None:
+        """启动幽灵代理扫描线程"""
+        self._set_buttons_state(False)
+        self.progress.config(mode="indeterminate")
+        self.progress.start(10)
+        self._set_top_badge("running")
+
+        threading.Thread(
+            target=self._proxy_ghost_scan_logic,
+            daemon=True
+        ).start()
+
+    def _proxy_ghost_scan_logic(self) -> None:
+        """幽灵代理扫描与修复逻辑（后台线程）"""
+        try:
+            self.log_safe("=" * 50)
+            self.log_safe(t("proxy_ghost.scan_title", self.lang), "info")
+            self._set_status(t("proxy_ghost.scanning", self.lang), "#0057b7")
+
+            # 扫描并测试代理环境变量
+            healthy, dead = self.operations.scan_proxy_env()
+
+            # 记录扫描结果
+            if not healthy and not dead:
+                self.log_safe(t("proxy_ghost.no_proxy_found", self.lang), "success")
+            elif dead:
+                self.log_safe(t("proxy_ghost.dead_found", self.lang, count=len(dead)), "error")
+                self.log_safe(t("proxy_ghost.dead_details", self.lang), "warn")
+                for proxy in dead:
+                    self.log_safe(
+                        t("proxy_ghost.proxy_item", self.lang,
+                          scope=proxy.scope, name=proxy.name, value=proxy.value),
+                        "error"
+                    )
+            else:
+                self.log_safe(t("proxy_ghost.all_healthy", self.lang, count=len(healthy)), "success")
+                self.log_safe(t("proxy_ghost.healthy_details", self.lang), "info")
+                for proxy in healthy:
+                    self.log_safe(
+                        t("proxy_ghost.proxy_item", self.lang,
+                          scope=proxy.scope, name=proxy.name, value=proxy.value),
+                        "info"
+                    )
+
+            # 如果有失效的代理，询问是否修复
+            if dead:
+                should_fix = self.ui_caller.call_and_wait(
+                    lambda: messagebox.askyesno(
+                        t("msg.proxy_ghost_scan.title", self.lang),
+                        t("msg.proxy_ghost_scan.has_dead", self.lang, count=len(dead))
+                    )
+                )
+
+                if should_fix:
+                    self.log_safe("-" * 50)
+                    self.log_safe(t("proxy_ghost.fixing", self.lang), "warn")
+
+                    # 执行自动修复
+                    results = self.operations.fix_proxy_env()
+
+                    # 记录修复结果
+                    self.log_safe(t("proxy_ghost.fix_success", self.lang), "success")
+                    if "process" in results:
+                        r = results["process"]
+                        if r.ok:
+                            self.log_safe(r.output, "success")
+                    if "user" in results:
+                        r = results["user"]
+                        if r.ok:
+                            self.log_safe(r.output, "success")
+                    if "machine" in results:
+                        r = results["machine"]
+                        if r.ok:
+                            self.log_safe(r.output, "success")
+                        elif "Permission denied" in r.output:
+                            self.log_safe(t("proxy_ghost.fix_machine_denied", self.lang), "warn")
+
+                    self.log_safe(t("proxy_ghost.session_restored", self.lang), "success")
+
+                    # 显示完成对话框
+                    self.ui_caller.call(
+                        lambda: messagebox.showinfo(
+                            t("msg.proxy_ghost_fix.title", self.lang),
+                            t("msg.proxy_ghost_fix.content", self.lang)
+                        )
+                    )
+                else:
+                    self.log_safe(t("proxy_ghost.no_dead_proxy", self.lang), "info")
+            else:
+                # 没有失效代理，显示扫描结果
+                self.ui_caller.call(
+                    lambda: messagebox.showinfo(
+                        t("msg.proxy_ghost_scan.title", self.lang),
+                        t("msg.proxy_ghost_scan.no_dead", self.lang)
+                    )
+                )
+
+            self._set_status(t("status.done", self.lang), "#4b8b3b")
+
+        except Exception as e:
+            logger.exception("幽灵代理扫描失败")
             self._set_status(t("status.error", self.lang, error=str(e)), "red")
             self.ui_caller.call(
                 lambda: messagebox.showerror(

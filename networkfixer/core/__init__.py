@@ -5,6 +5,7 @@ from .registry import ProxyRegistry
 from .adapters import AdapterManager
 from .connectivity import ConnectivityTester
 from .operations import NetworkOperations, Step
+from .proxy_env import ProxyGhostKiller, ProxyEnvScanner, ProxyHealthChecker, ProxyEnvInfo
 
 __all__ = [
     "CommandExecutor",
@@ -14,4 +15,8 @@ __all__ = [
     "ConnectivityTester",
     "NetworkOperations",
     "Step",
+    "ProxyGhostKiller",
+    "ProxyEnvScanner",
+    "ProxyHealthChecker",
+    "ProxyEnvInfo",
 ]
