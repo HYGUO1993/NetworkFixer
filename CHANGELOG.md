@@ -1,5 +1,16 @@
 # 更新日志 (Changelog)
 
+## [v2.2.0] - 2026-09-21
+
+### ✨ 新增功能
+- **Microsoft 服务诊断**：修复前后自动记录 WinHTTP 代理、用户代理（ProxyEnable / ProxyServer / AutoConfigURL）和代理环境变量，并探测 `login.live.com:443`、`storeedgefd.dsx.mp.microsoft.com:443`。
+- 日志按 `Detected / Repair / Result` 输出结论，便于区分「网页正常但 Microsoft Store 初始化失败」是否由代理残留引起。
+- 界面新增「微软服务诊断」按钮，可单独复查，不必立刻执行修复。
+- **从 GitHub Release 更新**：新增「更新到最新版」。打包后的程序会读取 `HYGUO1993/NetworkFixer` 的最新 Release，下载 `NetworkFixer-<tag>-windows.zip`，对照发布的 `.sha256` 校验后再退出并由辅助进程替换程序文件。从源码运行时只打开 Release 页面。
+
+### 🔧 修复动作
+- 「关闭系统代理」现在会删除残留的 `AutoConfigURL`（PAC），并执行 `netsh winhttp reset proxy`。Microsoft Store、winget 和部分登录组件使用 WinHTTP，只清浏览器代理往往不够。
+
 ## [v2.1.0] - 2026-03-24
 
 ### ✨ 新增功能

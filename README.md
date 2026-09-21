@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)](https://www.microsoft.com/windows)
 
-**NetworkFixer** 是一个轻量级的 Windows 网络修复工具，专为解决 VPN、代理软件关闭后无法上网的问题而设计。
+**NetworkFixer** 是一个轻量级的 Windows 网络修复工具，专为解决 VPN、代理软件关闭后无法上网的问题而设计。浏览器能正常打开，但 Microsoft Store 初始化失败、winget 连不上或登录窗口一直转圈时，它会先检查代理残留，而不是先重装 Store。
 
 当前仓库已完成 `v2.0.0` 架构重构（`networkfixer/` 包化），保持零运行时外部依赖（仅标准库）。
 
@@ -14,7 +14,9 @@
 ## 🚀 主要功能
 
 - **幽灵代理专杀**：扫描并清除失效的代理环境变量（http_proxy/https_proxy/all_proxy），解决关闭代理软件后网络请求失败的问题。
-- **一键修复系统代理**：清除残留的系统代理配置（最常见的断网原因）。
+- **一键修复系统代理**：清除用户代理、PAC（AutoConfigURL），并执行 `netsh winhttp reset proxy`。Microsoft Store、winget 和部分系统登录走的是 WinHTTP，而不只是浏览器代理。
+- **Microsoft 服务诊断**：修复前后自动记录 WinHTTP 代理、`ProxyEnable` / `ProxyServer` / `AutoConfigURL`，并探测 `login.live.com:443` 与 `storeedgefd.dsx.mp.microsoft.com:443`，用 Detected / Repair / Result 说明是残留代理还是端点恢复。
+- **从 GitHub Release 更新**：打包后的程序可一键检查最新版本，下载官方 Windows 安装包并在校验通过后重启替换。源码运行时只打开发布页。
 - **网络环境重置**：支持刷新 DNS 缓存、重置 Winsock 目录、重置 IP 地址。
 - **深度修复**：提供重置 TCP/IP 协议栈和重启指定网卡的高级选项。
 - **可视化日志**：实时显示修复进度和操作结果。
@@ -90,9 +92,15 @@ NetworkFixer/
 - 重构方案（归档）： [docs/archive/REFACTOR_PLAN.md](docs/archive/REFACTOR_PLAN.md)
 - 实施日志（归档）： [docs/archive/IMPLEMENTATION_LOG.md](docs/archive/IMPLEMENTATION_LOG.md)
 - 性能说明（归档）： [docs/archive/PERFORMANCE_OPTIMIZATIONS.md](docs/archive/PERFORMANCE_OPTIMIZATIONS.md)
-- 发布说明： [docs/releases/RELEASE_NOTES_v2.0.1.md](docs/releases/RELEASE_NOTES_v2.0.1.md)
+- 发布说明： [docs/releases/RELEASE_NOTES_v2.2.0.md](docs/releases/RELEASE_NOTES_v2.2.0.md)
 
 ## ❓ 常见问题 (Troubleshooting)
+
+- **使用 Clash/VPN 后 Microsoft Store 提示「初始化失败」**  
+  如果普通网页仍能打开，而 Microsoft Store 无法初始化，多半是代理软件退出后留下的系统代理、WinHTTP 代理或网络栈状态。请先退出代理客户端，再运行 NetworkFixer。它会清除残留代理（含 PAC 与 WinHTTP）并刷新 Windows 网络栈。修复日志里的 `Detected / Repair / Result` 会标明当时是残留代理，还是 Microsoft 端点已经恢复。
+
+  > **Microsoft Store shows “Initialization failed” after using Clash/VPN**  
+  > If Microsoft Store fails to initialize while normal web browsing still works, stale proxy settings or network-stack state left by Clash/VPN software may be responsible. Exit the proxy client and run NetworkFixer to clear residual proxy settings and refresh the Windows network stack.
 
 - **运行即退出/未见窗口**：请确认以管理员身份启动；若 UAC 被安全软件拦截，请在信任后重试。
 - **无法导出日志**：确认目标目录写入权限，或导出到桌面再尝试。

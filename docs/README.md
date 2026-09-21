@@ -15,6 +15,7 @@
 
 版本发布说明：
 
+- [RELEASE_NOTES_v2.2.0.md](releases/RELEASE_NOTES_v2.2.0.md)
 - [RELEASE_NOTES_v2.0.1.md](releases/RELEASE_NOTES_v2.0.1.md)
 
 ## 主入口文档
