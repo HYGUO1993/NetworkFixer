@@ -10,20 +10,32 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from tkinter.scrolledtext import ScrolledText
+import os
 import threading
 import logging
+import webbrowser
 from typing import Optional
 
+from networkfixer import __version__
 from ..utils.thread import UISafeCaller, CancellationToken
 from ..utils.admin import is_admin
 from ..core.operations import NetworkOperations, Step
+from ..core.ms_diagnostic import DiagnosticSnapshot, detected_flags, repair_flags, result_flags
+from ..core.updater import (
+    UpdateError,
+    compare_versions,
+    fetch_latest_release,
+    install_directory,
+    is_frozen_app,
+    notes_excerpt,
+    stage_release,
+    start_staged_replace,
+)
 from ..models.result import StepResult, ConnectivityResult, AppConfig
 from ..models.config import get_config
 from ..i18n import t, detect_system_language
 
 logger = logging.getLogger(__name__)
-
-__version__ = "2.1.0"
 
 
 class NetworkFixerApp:
@@ -310,6 +322,23 @@ class NetworkFixerApp:
         )
         self.btn_proxy_ghost.grid(row=1, column=0, columnspan=2, padx=4, pady=(4, 0), sticky="ew")
 
+        self.btn_ms_diag = ttk.Button(
+            frame_run,
+            text=t("ms.btn", self.lang),
+            width=25,
+            style="Secondary.TButton",
+            command=self._start_ms_diagnosis
+        )
+        self.btn_ms_diag.grid(row=1, column=2, columnspan=2, padx=4, pady=(4, 0), sticky="ew")
+
+        self.btn_update = ttk.Button(
+            frame_run,
+            text=t("update.btn", self.lang),
+            style="Secondary.TButton",
+            command=self._start_update
+        )
+        self.btn_update.grid(row=2, column=0, columnspan=4, padx=4, pady=(4, 0), sticky="ew")
+
     def _create_status_section(self) -> None:
         """创建状态和进度区域"""
         # 状态标签
@@ -433,7 +462,9 @@ class NetworkFixerApp:
             lambda: (
                 self.btn_fix.config(state=state),
                 self.btn_test.config(state=state),
-                self.btn_proxy_ghost.config(state=state)
+                self.btn_proxy_ghost.config(state=state),
+                self.btn_ms_diag.config(state=state),
+                self.btn_update.config(state=state)
             )
         )
 
@@ -523,6 +554,227 @@ class NetworkFixerApp:
 
         return steps
 
+    def _log_diagnostic_flags(self, section_key: str, flags) -> None:
+        """把诊断结论按 ✓ / ✗ 写进日志。"""
+        self.log_safe(t(section_key, self.lang), "info")
+        for flag in flags:
+            mark = "✓" if flag.ok else "✗"
+            level = "success" if flag.ok else "error"
+            self.log_safe(f"{mark} {t(flag.code, self.lang)}", level)
+
+    def _log_ms_evidence(self, snapshot: DiagnosticSnapshot) -> None:
+        """记录 WinHTTP、注册表代理和 Microsoft 端点探测原文。"""
+        self.log_safe(t("ms.evidence.title", self.lang), "info")
+        if snapshot.winhttp_direct is True:
+            winhttp_state = t("ms.evidence.winhttp_direct", self.lang)
+        elif snapshot.winhttp_direct is False:
+            winhttp_state = t("ms.evidence.winhttp_proxy", self.lang)
+        else:
+            winhttp_state = t("ms.evidence.winhttp_unknown", self.lang)
+        self.log_safe(f"  WinHTTP: {winhttp_state}", "info")
+        for line in (snapshot.winhttp_raw or "").splitlines():
+            stripped = line.strip()
+            if stripped:
+                self.log_safe(f"    {stripped}", "info")
+
+        server = snapshot.proxy_server or t("proxy.no_server", self.lang)
+        auto_config = snapshot.auto_config_url or t("proxy.no_server", self.lang)
+        self.log_safe(
+            t(
+                "ms.evidence.registry",
+                self.lang,
+                enable=snapshot.proxy_enable,
+                server=server,
+                autoconfig=auto_config,
+            ),
+            "info",
+        )
+        for item in snapshot.env_proxies:
+            self.log_safe(
+                t(
+                    "ms.evidence.env_item",
+                    self.lang,
+                    scope=item.scope,
+                    name=item.name,
+                    value=item.value,
+                ),
+                "warn",
+            )
+        for endpoint in snapshot.endpoints:
+            key = "ms.evidence.endpoint_ok" if endpoint.ok else "ms.evidence.endpoint_fail"
+            level = "success" if endpoint.ok else "error"
+            self.log_safe(
+                t(key, self.lang, host=endpoint.host, port=endpoint.port),
+                level,
+            )
+
+    def _collect_ms_snapshot(self) -> Optional[DiagnosticSnapshot]:
+        try:
+            return self.operations.diagnose_microsoft()
+        except Exception as exc:
+            logger.exception("Microsoft 服务诊断失败")
+            self.log_safe(t("ms.diag_failed", self.lang, error=str(exc)), "warn")
+            return None
+
+    def _start_ms_diagnosis(self) -> None:
+        """单独运行 Microsoft 服务诊断。"""
+        self._set_buttons_state(False)
+        self.progress.config(mode="indeterminate")
+        self.progress.start(10)
+        self._set_top_badge("testing")
+
+        threading.Thread(
+            target=self._ms_diagnosis_only,
+            daemon=True
+        ).start()
+
+    def _ms_diagnosis_only(self) -> None:
+        try:
+            self.log_safe("=" * 50)
+            self.log_safe(t("ms.diag_title", self.lang), "info")
+            self._set_status(t("ms.status.diagnosing", self.lang), "#0057b7")
+            snapshot = self._collect_ms_snapshot()
+            if snapshot is not None:
+                self._log_diagnostic_flags("ms.section.detected", detected_flags(snapshot))
+                self._log_ms_evidence(snapshot)
+            self._set_status(t("status.ready", self.lang), "black")
+        except Exception as exc:
+            logger.exception("Microsoft 服务诊断失败")
+            self._set_status(t("status.error", self.lang, error=str(exc)), "red")
+        finally:
+            self.ui_caller.call(lambda: self.progress.stop())
+            self.ui_caller.call(lambda: self.progress.config(mode="determinate", value=0))
+            self._set_buttons_state(True)
+
+    def _ask_yes_no(self, title: str, message: str) -> bool:
+        done = threading.Event()
+        answer = {"ok": False}
+
+        def ask() -> None:
+            answer["ok"] = bool(messagebox.askyesno(title, message, parent=self.root))
+            done.set()
+
+        self.ui_caller.call(ask)
+        if not done.wait(timeout=600):
+            return False
+        return answer["ok"]
+
+    def _show_update_message(self, kind: str, title: str, message: str) -> None:
+        def show() -> None:
+            if kind == "error":
+                messagebox.showerror(title, message, parent=self.root)
+            else:
+                messagebox.showinfo(title, message, parent=self.root)
+        self.ui_caller.call(show)
+
+    def _start_update(self) -> None:
+        """检查 GitHub Release，并在打包版本上完成下载与替换。"""
+        self._leave_for_update = False
+        self._set_buttons_state(False)
+        self.progress.config(mode="indeterminate")
+        self.progress.start(10)
+        self._set_top_badge("running")
+        threading.Thread(target=self._update_logic, daemon=True).start()
+
+    def _update_logic(self) -> None:
+        try:
+            self.log_safe("=" * 50)
+            self.log_safe(t("update.checking", self.lang), "info")
+            self._set_status(t("update.checking", self.lang), "#0057b7")
+            info = fetch_latest_release()
+            relation = compare_versions(__version__, info.tag)
+            if relation > 0:
+                message = t(
+                    "update.ahead",
+                    self.lang,
+                    current=__version__,
+                    latest=info.tag,
+                )
+                self.log_safe(message, "success")
+                self._show_update_message("info", t("update.latest_ok.title", self.lang), message)
+                self._set_status(t("status.ready", self.lang), "black")
+                return
+            if relation == 0:
+                message = t(
+                    "update.up_to_date",
+                    self.lang,
+                    current=__version__,
+                    latest=info.tag,
+                )
+                self.log_safe(message, "success")
+                self._show_update_message("info", t("update.latest_ok.title", self.lang), message)
+                self._set_status(t("status.ready", self.lang), "black")
+                return
+
+            notes = notes_excerpt(info.body)
+            prompt = t(
+                "update.available.content",
+                self.lang,
+                current=__version__,
+                latest=info.tag,
+            )
+            if notes:
+                prompt = prompt + "\n\n" + notes
+            if not self._ask_yes_no(t("update.available.title", self.lang), prompt):
+                self.log_safe(t("update.cancelled", self.lang), "warn")
+                self._set_status(t("status.ready", self.lang), "black")
+                return
+
+            if not is_frozen_app():
+                self.log_safe(t("update.source_mode", self.lang, url=info.html_url), "warn")
+                self.ui_caller.call(lambda: webbrowser.open(info.html_url))
+                self._show_update_message(
+                    "info",
+                    t("update.source_mode.title", self.lang),
+                    t("update.source_mode.content", self.lang, url=info.html_url),
+                )
+                self._set_status(t("status.ready", self.lang), "black")
+                return
+
+            self._set_status(t("update.downloading", self.lang, version=info.tag), "#0057b7")
+            switched = {"done": False}
+
+            def on_progress(written: int, total: int) -> None:
+                if not switched["done"]:
+                    switched["done"] = True
+
+                    def switch() -> None:
+                        self.progress.stop()
+                        self.progress.config(mode="determinate", maximum=100)
+
+                    self.ui_caller.call(switch)
+                if total:
+                    self._set_progress(written * 100 / total)
+
+            payload_dir = stage_release(info, progress=on_progress)
+            self.log_safe(t("update.applying", self.lang, version=info.tag), "warn")
+            start_staged_replace(payload_dir, install_directory())
+            self._leave_for_update = True
+            self.ui_caller.call(self._exit_for_update)
+        except UpdateError as exc:
+            message = t(exc.key, self.lang, **exc.kwargs)
+            self.log_safe(message, "error")
+            self._set_status(t("status.error", self.lang, error=message), "red")
+            self._show_update_message("error", t("update.failed.title", self.lang), message)
+        except Exception as exc:
+            logger.exception("更新失败")
+            message = t("update.error.network", self.lang, error=str(exc))
+            self.log_safe(message, "error")
+            self._set_status(t("status.error", self.lang, error=message), "red")
+            self._show_update_message("error", t("update.failed.title", self.lang), message)
+        finally:
+            if not getattr(self, "_leave_for_update", False):
+                self.ui_caller.call(lambda: self.progress.stop())
+                self.ui_caller.call(lambda: self.progress.config(mode="determinate", value=0))
+                self._set_buttons_state(True)
+
+    def _exit_for_update(self) -> None:
+        """退出当前进程，让更新脚本替换正在运行的程序文件。"""
+        self.cleanup()
+        self.root.quit()
+        self.root.destroy()
+        os._exit(0)
+
     def _handle_step_result(self, title_key: str, result: StepResult) -> None:
         """处理并记录修复步骤的结果"""
         status = t("result.success", self.lang) if result.ok else t("result.failed", self.lang)
@@ -572,8 +824,17 @@ class NetworkFixerApp:
                 self._set_buttons_state(True)
                 return
 
+            self.log_safe("=" * 50)
+            self.log_safe(t("ms.diag_title", self.lang), "info")
+            self._set_status(t("ms.status.diagnosing", self.lang), "#0057b7")
+            before = self._collect_ms_snapshot()
+            if before is not None:
+                self._log_diagnostic_flags("ms.section.detected", detected_flags(before))
+                self._log_ms_evidence(before)
+
             per_step = 100 / total
             progress_val = 0.0
+            step_results = []
 
             # 逐步执行修复
             for idx, step in enumerate(steps, start=1):
@@ -591,11 +852,15 @@ class NetworkFixerApp:
 
                 # 执行当前步骤
                 result = step.func()
+                step_results.append(result)
                 self._handle_step_result(step.title_key, result)
 
                 # 更新进度条
                 progress_val += per_step
                 self._set_progress(progress_val)
+
+            if step_results:
+                self._log_diagnostic_flags("ms.section.repair", repair_flags(step_results))
 
             # 最后进行连通性测试
             self._set_status(
@@ -606,6 +871,14 @@ class NetworkFixerApp:
             conn = self.operations.test_connectivity()
             self._log_connectivity_result(conn)
             self._set_progress(100)
+
+            self._set_status(t("ms.status.recheck", self.lang), "#0057b7")
+            after = self._collect_ms_snapshot()
+            if before is not None and after is not None:
+                self._log_diagnostic_flags("ms.section.result", result_flags(before, after))
+                self._log_ms_evidence(after)
+            elif after is not None:
+                self._log_ms_evidence(after)
 
             # 完成
             self._set_status(t("status.done", self.lang), "#4b8b3b")

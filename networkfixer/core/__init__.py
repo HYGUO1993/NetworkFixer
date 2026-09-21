@@ -6,6 +6,14 @@ from .adapters import AdapterManager
 from .connectivity import ConnectivityTester
 from .operations import NetworkOperations, Step
 from .proxy_env import ProxyGhostKiller, ProxyEnvScanner, ProxyHealthChecker, ProxyEnvInfo
+from .ms_diagnostic import (
+    DiagnosticFlag,
+    DiagnosticSnapshot,
+    MicrosoftServiceDiagnostic,
+    detected_flags,
+    repair_flags,
+    result_flags,
+)
 
 __all__ = [
     "CommandExecutor",
@@ -19,4 +27,10 @@ __all__ = [
     "ProxyEnvScanner",
     "ProxyHealthChecker",
     "ProxyEnvInfo",
+    "DiagnosticFlag",
+    "DiagnosticSnapshot",
+    "MicrosoftServiceDiagnostic",
+    "detected_flags",
+    "repair_flags",
+    "result_flags",
 ]

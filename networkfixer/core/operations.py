@@ -6,6 +6,7 @@ from .registry import ProxyRegistry
 from .adapters import AdapterManager
 from .connectivity import ConnectivityTester
 from .proxy_env import ProxyGhostKiller
+from .ms_diagnostic import DiagnosticSnapshot, MicrosoftServiceDiagnostic
 from ..models.result import StepResult, AppConfig, ConnectivityResult
 from ..models.config import get_config
 
@@ -33,12 +34,31 @@ class NetworkOperations:
         self.proxy_ghost_killer = ProxyGhostKiller(
             health_check_timeout=2.0
         )
+        self.ms_diagnostic = MicrosoftServiceDiagnostic(
+            executor=self.executor,
+            timeout_sec=float(self.config.http_timeout_sec),
+            proxy_registry=self.proxy_registry,
+        )
 
     def get_proxy_status(self) -> Tuple[bool, str]:
         return self.proxy_registry.get_status()
 
     def disable_proxy(self) -> StepResult:
-        return self.proxy_registry.disable()
+        registry_result = self.proxy_registry.disable()
+        winhttp_result = self.executor.run(
+            ["netsh", "winhttp", "reset", "proxy"],
+            timeout=15,
+        )
+        output_parts = [
+            part for part in (registry_result.output, winhttp_result.output) if part
+        ]
+        return StepResult(
+            ok=registry_result.ok and winhttp_result.ok and winhttp_result.return_code == 0,
+            title="disable_proxy",
+            output="\n".join(output_parts),
+            error=registry_result.error or winhttp_result.error,
+            return_code=winhttp_result.return_code,
+        )
 
     def flush_dns(self) -> StepResult:
         result = self.executor.run("ipconfig /flushdns")
@@ -86,6 +106,10 @@ class NetworkOperations:
 
     def test_connectivity(self) -> ConnectivityResult:
         return self.connectivity_tester.test()
+
+    def diagnose_microsoft(self) -> DiagnosticSnapshot:
+        """Snapshot WinHTTP/user proxy state and Microsoft endpoint reachability."""
+        return self.ms_diagnostic.collect()
 
     def scan_proxy_env(self):
         """
